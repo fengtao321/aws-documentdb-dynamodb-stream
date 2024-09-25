@@ -1,85 +1,119 @@
-import boto3
+import pymongo
+import json
 import os
-
+import urllib
+import datetime
 from dynamodb_json import json_util as json
 
-# from aws_requests_auth.aws_auth import AWSRequestsAuth
-# from elasticsearch import Elasticsearch
-# from elasticsearch import RequestsHttpConnection
-# from elasticsearch import helpers
+# connect to document db
+urlDb = (
+    "mongodb://pc2admin:"
+    + urllib.parse.quote(
+        "na&41d1CPC)7toaXEp5<+-l6ZH]!MO]Z3[4>f<4jw{x]D2QP%GNY9e]K+hcrq}(2IFLXfv&]S:D4-f4zswn:HF+e{wxo=%($N1I"
+    )
+    + os.environ.get("ATLAS_URI")
+)
+database = os.environ["ATLAS_TABLE"]
+table = os.environ["ATLAS_COLLECTION"]
 
-# HOST = os.environ.get('ES_HOST')
-# INDEX = os.environ.get('ES_INDEX')
+
+myclient = pymongo.MongoClient(urlDb)
+mydb = myclient[database]
+mycol = mydb[table]
+
+
+# define dynamodb hash key and sort key
 DB_HASH_KEY = os.environ.get("DB_HASH_KEY")
 DB_SORT_KEY = os.environ.get("DB_SORT_KEY")
-
-# def get_es():
-
-#     session = boto3.Session()
-#     creds = session.get_credentials().get_frozen_credentials()
-#     credentials = session.get_credentials()
-#     access_key = credentials.access_key
-#     secret_key = credentials.secret_key
-#     session_token = credentials.token
-
-#     awsauth = AWSRequestsAuth(
-#         aws_access_key=access_key,
-#         aws_secret_access_key=secret_key,
-#         aws_token=session_token,
-#         aws_host=HOST,
-#         aws_region=session.region_name,
-#         aws_service='es'
-#     )
-
-#     return Elasticsearch(
-#         hosts=[{'host': HOST, 'port': 443}],
-#         http_auth=awsauth,
-#         use_ssl=True,
-#         verify_certs=True,
-#         connection_class=RequestsHttpConnection
-#     )
-
-# def pushBatch(actions):
-#     elasticsearch = get_es()
-#     print('Pushing batch of: ' + str(len(actions)) + ' to ES')
-#     (success, failed) = helpers.bulk(elasticsearch, actions, stats_only=True)
-#     print('Batch successfully pushed to elasticsearch')
 
 
 def lambda_handler(event, context):
 
-    eventTypes = ["INSERT", "MODIFY", "REMOVE"]
-    print(event)
-    records = event["Records"]
-    actions = []
+    # read env variables for mongodb connection
+    count = 0
     ignoredRecordCount = 0
-    for record in records:
-        if record["eventName"] in eventTypes:
-            action = (
-                json.loads(record["dynamodb"]["OldImage"])
-                if record["eventName"] == "REMOVE"
-                else json.loads(record["dynamodb"]["NewImage"])
-            )
-            actions.append(
-                {
-                    # '_index': INDEX,
-                    "_type": "_doc",
-                    "_id": action[DB_HASH_KEY] + ":" + action[DB_SORT_KEY],
-                    "_source": action,
-                    "_op_type": (
-                        "delete" if record["eventName"] == "REMOVE" else "index"
-                    ),
-                }
-            )
-        # else:
-        #     ignoredRecordCount += 1
-        #     print(record)
-        # if len(actions) == 50:
-        #     pushBatch(actions)
-        #     actions = []
 
-    # if len(actions) > 0:
-    #     pushBatch(actions)
-    # print('Invalid Event records ignored: ' + str(ignoredRecordCount))
-    print("What is the actions?")
-    print(actions)
+    with myclient.start_session() as session:
+
+        for record in event["Records"]:
+            ddb = record["dynamodb"]
+
+            if record["eventName"] == "INSERT" or record["eventName"] == "MODIFY":
+                newimage = ddb["NewImage"]
+                newimage_conv = json.loads(newimage)
+                print(newimage_conv)
+
+                # create the explicit _id
+                newimage_conv["_id"] = (
+                    str(newimage_conv[DB_HASH_KEY]) + "||" + newimage_conv[DB_SORT_KEY]
+                )
+
+                ### custom conversions ###
+                newimage_conv["created_at"] = datetime.datetime.now()
+
+                try:
+                    mycol.update_one(
+                        {"_id": newimage_conv["_id"]},
+                        {"$set": newimage_conv},
+                        upsert=True,
+                        session=session,
+                    )
+                    count = count + 1
+
+                except Exception as e:
+                    # add to DL queue
+                    print(
+                        "ERROR update _id=",
+                        str(newimage_conv[DB_HASH_KEY])
+                        + "||"
+                        + newimage_conv[DB_SORT_KEY],
+                        " ",
+                        type(e),
+                        e,
+                    )
+                    raise Exception(record)
+
+            elif record["eventName"] == "REMOVE":
+
+                oldimage = ddb["OldImage"]
+                oldimage_conv = json.loads(oldimage)
+
+                try:
+                    mycol.delete_one(
+                        {
+                            "_id": str(oldimage_conv[DB_HASH_KEY])
+                            + "||"
+                            + oldimage_conv[DB_SORT_KEY]
+                        },
+                        session=session,
+                    )
+                    count = count + 1
+
+                except Exception as e:
+                    # add to DL queue
+                    print(
+                        "ERROR delete _id",
+                        str(oldimage_conv[DB_HASH_KEY])
+                        + "||"
+                        + oldimage_conv[DB_SORT_KEY],
+                        " ",
+                        type(e),
+                        e,
+                    )
+                    raise Exception(record)
+            else:
+                # add to DL queue
+                ignoredRecordCount += 1
+                raise Exception(record)
+
+    session.end_session()
+
+    # return response code to Lambda and log on CloudWatch
+    if count == len(event["Records"]):
+        print("Successfully processed %s records." % str(len(event["Records"])))
+        return {"statusCode": 200, "body": json.dumps("OK")}
+    else:
+        print(
+            "Processed only ", str(count), " records on %s" % str(len(event["Records"]))
+        )
+        return {"statusCode": 500, "body": json.dumps("ERROR")}
