@@ -10,8 +10,8 @@ from dynamodb_json import json_util as json
 
 # HOST = os.environ.get('ES_HOST')
 # INDEX = os.environ.get('ES_INDEX')
-DB_HASH_KEY = os.environ.get('DB_HASH_KEY')
-DB_SORT_KEY = os.environ.get('DB_SORT_KEY')
+DB_HASH_KEY = os.environ.get("DB_HASH_KEY")
+DB_SORT_KEY = os.environ.get("DB_SORT_KEY")
 
 # def get_es():
 
@@ -48,23 +48,27 @@ DB_SORT_KEY = os.environ.get('DB_SORT_KEY')
 
 def lambda_handler(event, context):
 
-    eventTypes = ['INSERT', 'MODIFY', 'REMOVE']
-    records = event['Records']
+    eventTypes = ["INSERT", "MODIFY", "REMOVE"]
+    print(event)
+    records = event["Records"]
     actions = []
     ignoredRecordCount = 0
     for record in records:
-        if record['eventName'] in eventTypes:
-            action = json.loads(record['dynamodb']['OldImage']) \
-                if record['eventName'] == 'REMOVE' \
-                else json.loads(record['dynamodb']['NewImage'])
+        if record["eventName"] in eventTypes:
+            action = (
+                json.loads(record["dynamodb"]["OldImage"])
+                if record["eventName"] == "REMOVE"
+                else json.loads(record["dynamodb"]["NewImage"])
+            )
             actions.append(
                 {
-                    '_index': INDEX,
-                    '_type': '_doc',
-                    '_id': action[DB_HASH_KEY]+':'+action[DB_SORT_KEY],
-                    '_source': action,
-                    '_op_type': 'delete' if record['eventName'] == 'REMOVE'
-                    else 'index'
+                    # '_index': INDEX,
+                    "_type": "_doc",
+                    "_id": action[DB_HASH_KEY] + ":" + action[DB_SORT_KEY],
+                    "_source": action,
+                    "_op_type": (
+                        "delete" if record["eventName"] == "REMOVE" else "index"
+                    ),
                 }
             )
         # else:
@@ -77,5 +81,5 @@ def lambda_handler(event, context):
     # if len(actions) > 0:
     #     pushBatch(actions)
     # print('Invalid Event records ignored: ' + str(ignoredRecordCount))
-    print('What is the actions?')
+    print("What is the actions?")
     print(actions)
