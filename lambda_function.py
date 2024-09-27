@@ -37,11 +37,11 @@ def lambda_handler(event, context):
 
         for record in event["Records"]:
             ddb = record["dynamodb"]
+            print(record)
 
             if record["eventName"] == "INSERT" or record["eventName"] == "MODIFY":
                 newimage = ddb["NewImage"]
                 newimage_conv = json.loads(newimage)
-                print(newimage_conv)
 
                 # create the explicit _id
                 newimage_conv["_id"] = (
@@ -79,7 +79,7 @@ def lambda_handler(event, context):
                 oldimage_conv = json.loads(oldimage)
 
                 try:
-                    mycol.delete_one(
+                    result = mycol.delete_one(
                         {
                             "_id": str(oldimage_conv[DB_HASH_KEY])
                             + "||"
@@ -89,6 +89,8 @@ def lambda_handler(event, context):
                     )
                     count = count + 1
 
+                    if result.deleted_count == 0:
+                        raise Exception(record)
                 except Exception as e:
                     # add to DL queue
                     print(
@@ -101,9 +103,11 @@ def lambda_handler(event, context):
                         e,
                     )
                     raise Exception(record)
+
             else:
                 # add to DL queue
                 ignoredRecordCount += 1
+                print("throw to DLQ")
                 raise Exception(record)
 
     session.end_session()
