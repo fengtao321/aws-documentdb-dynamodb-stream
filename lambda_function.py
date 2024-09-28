@@ -135,6 +135,8 @@ def lambda_handler(event, context):
         print("Successfully processed %s records." % str(len(event["Records"])))
         return {"statusCode": 200, "body": json.dumps("OK")}
     else:
+
+        # This happens when remove an item, but the item is not in document db
         print(
             "Processed only ", str(count), " records on %s" % str(len(event["Records"]))
         )
