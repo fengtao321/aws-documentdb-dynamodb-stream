@@ -3,7 +3,7 @@ import os
 import datetime
 from dynamodb_json import json_util as json
 from pymongo import DeleteOne, UpdateOne
-from common import batch_write, convert_new_image, convert_old_image, get_index
+from common import batch_write, convert_new_image, convert_old_image
 
 batch_size = int(os.environ["BATCH_SIZE"]) if os.environ.get("BATCH_SIZE") else 1
 

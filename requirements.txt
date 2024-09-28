@@ -2,3 +2,4 @@ boto3==1.35.26
 dynamodb_json==1.4.2
 aws-requests-auth==0.4.3
 pymongo==4.9.1
+aws_lambda_powertools==3.0.0

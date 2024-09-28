@@ -4,18 +4,25 @@ import urllib
 from pymongo.errors import BulkWriteError
 import datetime
 from dynamodb_json import json_util as json
+from aws_lambda_powertools.utilities import parameters
 
 # define mongodb url, username and password
-# miss the part to get password from secret manage
+
+secret = (
+    json.loads(parameters.get_secret(os.environ.get("ATLAS_SECRET")))
+    if os.environ.get("ATLAS_SECRET") != None
+    else ""
+)
+
 urlDb = (
     (
-        "mongodb://pc2admin:"
-        + urllib.parse.quote(
-            "na&41d1CPC)7toaXEp5<+-l6ZH]!MO]Z3[4>f<4jw{x]D2QP%GNY9e]K+hcrq}(2IFLXfv&]S:D4-f4zswn:HF+e{wxo=%($N1I"
-        )
+        "mongodb://"
+        + secret["user"]
+        + ":"
+        + urllib.parse.quote(secret["password"])
         + os.environ.get("ATLAS_URI")
     )
-    if os.environ.get("ATLAS_URI")
+    if os.environ.get("ATLAS_URI") and secret != ""
     else "mongodb://root:pass12345@localhost:27017"
 )
 database = (
@@ -82,8 +89,17 @@ def batch_write(requests, records):
 
 
 def get_index(image):
-    print("INDEX :: " + str(image[DB_HASH_KEY]) + "||" + image[DB_SORT_KEY])
-    return str(image[DB_HASH_KEY]) + "||" + image[DB_SORT_KEY]
+    hash_key = (
+        image[DB_HASH_KEY]
+        if isinstance(image[DB_HASH_KEY], str)
+        else str(image[DB_HASH_KEY])
+    )
+    sort_key = (
+        image[DB_SORT_KEY]
+        if isinstance(image[DB_SORT_KEY], str)
+        else str(image[DB_SORT_KEY])
+    )
+    return hash_key + "||" + sort_key
 
 
 def convert_new_image(image):
