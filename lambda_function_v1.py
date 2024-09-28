@@ -18,8 +18,12 @@ mongo_uri = (
     + urllib.parse.quote(
         "na&41d1CPC)7toaXEp5<+-l6ZH]!MO]Z3[4>f<4jw{x]D2QP%GNY9e]K+hcrq}(2IFLXfv&]S:D4-f4zswn:HF+e{wxo=%($N1I"
     )
-    + os.environ.get("ATLAS_URI")
+    + "@ircc-pc2-dev-cluster.cluster-cug1sdcjdsgw.ca-central-1.docdb.amazonaws.com:27017/?tls=true&tlsCAFile=global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
 )
+
+
+
+print(mongo_uri)
 client = MongoClient(mongo_uri)
 database_name = os.environ.get("ATLAS_TABLE")
 col_name = os.environ.get("ATLAS_COLLECTION")
